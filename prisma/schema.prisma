@@ -1,0 +1,195 @@
+// Prisma schema for FDAware backend
+// Based on PRD requirements
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  REVIEWER
+  VIEWER
+}
+
+model User {
+  id           String           @id @default(uuid())
+  email        String           @unique
+  password     String           // <-- Added for authentication
+  profileImage String?
+  firstName    String?
+  lastName     String?
+  company      String?
+  agreeToTerms Boolean?
+  onboardingComplete Boolean   @default(false)
+  workspaces   WorkspaceUser[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  profile      UserProfile?
+  invitationsSent Invitation[] @relation("InvitedByUser")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model Workspace {
+  id      String           @id @default(uuid())
+  name    String
+  users   WorkspaceUser[]
+  labels  Label[]
+  reports Report[]
+  invitations Invitation[]
+}
+
+model WorkspaceUser {
+  id          String   @id @default(uuid())
+  userId      String
+  workspaceId String
+  role        Role
+
+  user        User     @relation(fields: [userId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+model Label {
+  id          String         @id @default(uuid())
+  name        String
+  fileUrl     String
+  workspaceId String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id])
+  versions    LabelVersion[]
+  isDemo      Boolean @default(false)
+}
+
+enum LabelStatus {
+  SCANNED   // Automatically set after scan
+  PENDING   // (Unused, reserved for future)
+  APPROVED  // Reviewer approved this version
+  REJECTED  // Reviewer rejected this version
+}
+
+model LabelVersion {
+  id         String         @id @default(uuid())
+  labelId    String
+  label      Label          @relation(fields: [labelId], references: [id])
+  status     LabelStatus    // SCANNED: auto after upload, APPROVED/REJECTED: set by reviewer
+  extraction Json
+  overallScore Int?
+  compliantItems Json?
+  analyzedAt DateTime @default(now())
+  nextSteps Json?
+  violations Violation[]
+  reviewComment String? // Optional reviewer comment for approval/rejection
+  approvedBy String? // User ID who approved this version
+  rejectedBy String? // User ID who rejected this version
+  approvedAt DateTime? // When this version was approved
+  rejectedAt DateTime? // When this version was rejected
+}
+
+model Violation {
+  id         String   @id @default(uuid())
+  versionId  String
+  labelVersion LabelVersion @relation(fields: [versionId], references: [id])
+  type       String
+  message    String
+  suggestion String
+  citation   String
+  severity   String? @default("medium")
+  category   String? @default("General")
+  location   String?
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // monthly, quarterly, custom
+  status      String   @default("generating") // generating, completed, failed
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  generatedAt DateTime @default(now())
+  dateRange   Json     // { start: Date, end: Date }
+  filters     Json     // { productLines: string[], includeViolations: boolean, etc. }
+  summary     Json?    // { totalProducts: number, avgComplianceScore: number, etc. }
+  downloadUrl String?
+  expiresAt   DateTime?
+  progress    Int      @default(0)
+  estimatedCompletion DateTime?
+}
+
+model UserProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  companyType       CompanyType
+  teamSize          TeamSize
+  labelsPerMonth    LabelsPerMonth
+  goals             Goals[]
+  complianceProcess ComplianceProcess
+}
+
+enum CompanyType {
+  FOOD_MANUFACTURER
+  SUPPLEMENT_MANUFACTURER
+  BEVERAGE_COMPANY
+  REGULATORY_CONSULTANT
+  OTHER
+}
+
+enum TeamSize {
+  JUST_ME
+  TWO_TO_FIVE
+  SIX_TO_TWENTY
+  TWENTY_PLUS
+}
+
+enum LabelsPerMonth {
+  ONE_TO_FIVE
+  SIX_TO_TWENTY
+  TWENTY_ONE_TO_FIFTY
+  FIFTY_PLUS
+}
+
+enum Goals {
+  REDUCE_COSTS
+  SPEED_LAUNCH
+  AVOID_WARNING_LETTERS
+  IMPROVE_ACCURACY
+  STREAMLINE_WORKFLOW
+  ALL_OF_THE_ABOVE
+}
+
+enum ComplianceProcess {
+  EXTERNAL_CONSULTANTS
+  IN_HOUSE_TEAM
+  MANUAL_REVIEW
+  NO_FORMAL_PROCESS
+}
+
+model Invitation {
+  id           String   @id @default(uuid())
+  email        String
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  role         Role
+  status       String   @default("invited") // invited, accepted, expired, cancelled
+  invitedAt    DateTime @default(now())
+  invitedById  String
+  invitedBy    User     @relation("InvitedByUser", fields: [invitedById], references: [id])
+  acceptedAt   DateTime?
+  expiresAt    DateTime @default(dbgenerated("now() + interval '2 days'"))
+  token        String   // Secure random token for invite acceptance
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+} 
