@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards, Req } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { AuthGuard } from '../common/guards/auth.guard';
@@ -10,8 +10,8 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('overview')
-  async getReportsOverview(@Query('workspaceId') workspaceId: string) {
-    return this.reportsService.getReportsOverview(workspaceId);
+  async getReportsOverview(@Query('workspaceId') workspaceId: string, @Req() req: any) {
+    return this.reportsService.getReportsOverview(workspaceId, req.user.id);
   }
 
   @Get()
@@ -19,9 +19,11 @@ export class ReportsController {
     @Query('workspaceId') workspaceId: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Req() req?: any,
   ) {
     return this.reportsService.getReports(
       workspaceId,
+      req?.user?.id,
       limit ? parseInt(limit) : 10,
       offset ? parseInt(offset) : 0,
     );
@@ -29,13 +31,22 @@ export class ReportsController {
 
   @Post('generate')
   @Roles('admin', 'member')
-  async generateReport(@Body() generateDto: GenerateReportDto) {
-    return this.reportsService.generateReport(generateDto);
+  async generateReport(@Body() generateDto: GenerateReportDto, @Req() req: any) {
+    return this.reportsService.generateReport(generateDto, req.user.id);
   }
 
   @Get(':reportId')
   async getReportById(@Param('reportId') reportId: string) {
     return this.reportsService.getReportById(reportId);
+  }
+
+  @Get(':reportId/download')
+  async downloadReport(
+    @Param('reportId') reportId: string,
+    @Query('format') format: string = 'pdf',
+    @Req() req: any
+  ) {
+    return this.reportsService.getReportDownloadUrl(reportId, format, req.user.id);
   }
 
   @Delete(':reportId')

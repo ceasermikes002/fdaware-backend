@@ -14,6 +14,7 @@ import { ConfigModule } from './config/config.module';
 import { ReportsModule } from './reports/reports.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DemoModule } from './demo/demo.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DemoModule } from './demo/demo.module';
     ReportsModule,
     DashboardModule,
     DemoModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

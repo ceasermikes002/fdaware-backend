@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScanService } from '../scan/scan.service';
 import { S3Service } from './s3.service';
 import { LabelStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID;
 if (!DEMO_WORKSPACE_ID) {
@@ -11,7 +12,13 @@ if (!DEMO_WORKSPACE_ID) {
 
 @Injectable()
 export class LabelService {
-  constructor(private prisma: PrismaService, private scanService: ScanService, private s3Service: S3Service) {}
+  constructor(
+    private prisma: PrismaService,
+    private scanService: ScanService,
+    private s3Service: S3Service,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
+  ) {}
   // TODO: Implement label CRUD and S3 upload logic
 
   async createLabelWithFile(name: string, fileUrl: string, workspaceId: string, presignedUrl?: string) {
@@ -64,6 +71,26 @@ export class LabelService {
         });
         violations.push(violation);
       }
+    }
+
+    // Send notification to workspace members about label analysis completion
+    try {
+      const workspaceMembers = await this.prisma.workspaceUser.findMany({
+        where: { workspaceId },
+        include: { user: true },
+      });
+      
+      // Create notifications for all workspace members
+      for (const member of workspaceMembers) {
+        await this.notificationsService.createLabelAnalyzedNotification(
+          member.userId,
+          workspaceId,
+          label.name,
+          label.id
+        );
+      }
+    } catch (error) {
+      console.error('Failed to send label analysis notifications:', error);
     }
 
     return {
@@ -406,8 +433,45 @@ export class LabelService {
     const version = await this.prisma.labelVersion.update({
       where: { id: versionId },
       data,
-      include: { violations: true },
+      include: { violations: true, label: true },
     });
+    
+    // Send notification to workspace members about label status change
+    try {
+      const workspaceMembers = await this.prisma.workspaceUser.findMany({
+        where: { workspaceId: version.label.workspaceId },
+        include: { user: true },
+      });
+      
+      const reviewer = userId ? await this.prisma.user.findUnique({ where: { id: userId } }) : null;
+      const reviewerName = reviewer ? (reviewer.firstName && reviewer.lastName ? `${reviewer.firstName} ${reviewer.lastName}` : reviewer.email) : 'A reviewer';
+      
+      // Create notifications for all workspace members
+      for (const member of workspaceMembers) {
+        if (status === 'APPROVED') {
+          await this.notificationsService.createNotification({
+            userId: member.userId,
+            workspaceId: version.label.workspaceId,
+            type: 'LABEL_APPROVED' as any,
+            title: 'Label Approved',
+            message: `"${version.label.name}" has been approved by ${reviewerName}`,
+            data: { labelId: version.labelId, versionId: version.id, reviewerName },
+          });
+        } else if (status === 'REJECTED') {
+          await this.notificationsService.createNotification({
+            userId: member.userId,
+            workspaceId: version.label.workspaceId,
+            type: 'LABEL_REJECTED' as any,
+            title: 'Label Rejected',
+            message: `"${version.label.name}" has been rejected by ${reviewerName}`,
+            data: { labelId: version.labelId, versionId: version.id, reviewerName, reviewComment },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send label status notifications:', error);
+    }
+    
     return {
       version: {
         id: version.id,

@@ -1,16 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../common/utils/email.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { BASE_URL } from '../config/email.config';
 import { randomBytes } from 'crypto';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class WorkspaceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
   ) {}
   // TODO: Implement workspace CRUD and role management
 
@@ -70,6 +72,14 @@ export class WorkspaceService {
           year: new Date().getFullYear(),
         },
       });
+      
+      // Create notification for the added user
+      await this.notificationsService.createWorkspaceInviteNotification(
+        existingUser.id,
+        workspaceId,
+        inviterName,
+        workspaceName
+      );
       return {
         userId: existingUser.id,
         email: existingUser.email,
@@ -120,6 +130,9 @@ export class WorkspaceService {
         year: new Date().getFullYear(),
       },
     });
+    
+    // Note: For new invitations, we'll create the notification when they accept the invite
+    // since they don't have a user account yet
     return {
       inviteId: invite.id,
       email: invite.email,
@@ -388,4 +401,4 @@ export class WorkspaceService {
     });
     return Array.from(workspaceMap.values());
   }
-} 
+}

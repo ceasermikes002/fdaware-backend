@@ -32,6 +32,7 @@ model User {
   profile      UserProfile?
   invitationsSent Invitation[] @relation("InvitedByUser")
   passwordResetTokens PasswordResetToken[]
+  notifications Notification[]
 }
 
 model Workspace {
@@ -41,6 +42,7 @@ model Workspace {
   labels  Label[]
   reports Report[]
   invitations Invitation[]
+  notifications Notification[]
 }
 
 model WorkspaceUser {
@@ -192,4 +194,36 @@ model PasswordResetToken {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
-} 
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?    // Additional data for the notification
+  read        Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  
+  @@index([userId, read])
+  @@index([workspaceId])
+}
+
+enum NotificationType {
+  LABEL_ANALYZED
+  LABEL_APPROVED
+  LABEL_REJECTED
+  COMPLIANCE_ISSUE
+  WORKSPACE_INVITE
+  INVITE_ACCEPTED
+  REPORT_GENERATED
+  REPORT_FAILED
+  SYSTEM_UPDATE
+  WORKSPACE_ACTIVITY
+}
