@@ -8,8 +8,8 @@ async function bootstrap() {
     origin: 'http://localhost:3000',
     credentials: true,
   });
-  const port = process.env.PORT ?? 5000;
-  await app.listen(port);
+  const port = parseInt(process.env.PORT ?? '10000', 10);
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 Backend is running on http://localhost:${port}`);
 }
 bootstrap();
