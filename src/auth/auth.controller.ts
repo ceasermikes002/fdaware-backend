@@ -1,16 +1,18 @@
-import { Controller, Post, Body, UploadedFile, UseInterceptors, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, UploadedFile, UseInterceptors, UnauthorizedException, ValidationPipe } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SignInDto } from './dto/sign-in.dto';
+import { SignUpDto } from './dto/sign-up.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  async login(@Body() body: { email: string; password: string }) {
-    const user = await this.authService.validateUser(body.email, body.password);
+  async login(@Body(new ValidationPipe({ whitelist: true, transform: true })) dto: SignInDto) {
+    const user = await this.authService.validateUser(dto.email, dto.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -30,10 +32,10 @@ export class AuthController {
   @UseInterceptors(FileInterceptor('profileImage'))
   async signup(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: any
+    @Body(new ValidationPipe({ whitelist: true, transform: true })) dto: SignUpDto
   ) {
     const user = await this.authService.createUser({
-      ...body,
+      ...dto,
       profileImage: file ? file.filename : null,
     });
     return {
@@ -53,4 +55,4 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
-} 
+}
