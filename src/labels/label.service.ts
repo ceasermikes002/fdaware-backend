@@ -5,7 +5,7 @@ import { S3Service } from './s3.service';
 import { LabelStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 
-const DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID;
+const DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID; // Loaded via dotenv in main
 if (!DEMO_WORKSPACE_ID) {
   throw new Error('DEMO_WORKSPACE_ID environment variable is not set.');
 }
@@ -405,12 +405,17 @@ export class LabelService {
     const s3Url = await this.s3Service.uploadFile(file.buffer, file.originalname, file.mimetype);
     // Generate a presigned URL for ML service access
     const presignedUrl = await this.s3Service.getPresignedUrl(file.originalname);
+    // Ensure demo workspace id is set at runtime
+    const demoWorkspaceId = process.env.DEMO_WORKSPACE_ID;
+    if (!demoWorkspaceId) {
+      throw new Error('DEMO_WORKSPACE_ID environment variable is not set.');
+    }
     // Save label with isDemo: true and dummy name
     const label = await this.prisma.label.create({
       data: {
         name: file.originalname,
         fileUrl: s3Url,
-        workspaceId: DEMO_WORKSPACE_ID,
+        workspaceId: demoWorkspaceId,
         isDemo: true, 
       } 
     });
