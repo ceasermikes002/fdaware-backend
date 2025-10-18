@@ -6,6 +6,7 @@ import { EmailService } from '../common/utils/email.service';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -114,4 +115,6 @@ export class AuthService {
     });
     return { message: 'Password has been reset.' };
   }
-} 
+
+
+}

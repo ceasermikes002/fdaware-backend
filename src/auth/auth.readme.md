@@ -215,4 +215,8 @@ Update the profile of the currently authenticated user.
 
 ---
 
-For further details, see the code or contact the backend team. 
+- Returns the same shape as regular login with a JWT token.
+
+---
+
+For further details, see the code or contact the backend team.

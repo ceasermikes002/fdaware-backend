@@ -1,6 +1,3 @@
-// Prisma schema for FDAware backend
-// Based on PRD requirements
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,48 +7,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  REVIEWER
-  VIEWER
-}
-
 model User {
-  id           String           @id @default(uuid())
-  email        String           @unique
-  password     String           // <-- Added for authentication
-  profileImage String?
-  firstName    String?
-  lastName     String?
-  company      String?
-  agreeToTerms Boolean?
-  onboardingComplete Boolean   @default(false)
-  workspaces   WorkspaceUser[]
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  profile      UserProfile?
-  invitationsSent Invitation[] @relation("InvitedByUser")
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  password            String
+  profileImage        String?
+  createdAt           DateTime             @default(now())
+  agreeToTerms        Boolean?
+  company             String?
+  firstName           String?
+  lastName            String?
+  onboardingComplete  Boolean              @default(false)
+  updatedAt           DateTime             @updatedAt
+  name                String?
+  invitationsSent     Invitation[]         @relation("InvitedByUser")
+  notifications       Notification[]
   passwordResetTokens PasswordResetToken[]
-  notifications Notification[]
+  profile             UserProfile?
+  workspaces          WorkspaceUser[]
 }
 
 model Workspace {
-  id      String           @id @default(uuid())
-  name    String
-  users   WorkspaceUser[]
-  labels  Label[]
-  reports Report[]
-  invitations Invitation[]
+  id            String          @id @default(uuid())
+  name          String
+  invitations   Invitation[]
+  labels        Label[]
   notifications Notification[]
+  reports       Report[]
+  users         WorkspaceUser[]
 }
 
 model WorkspaceUser {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String
   workspaceId String
   role        Role
-
-  user        User     @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
 
   @@unique([userId, workspaceId])
@@ -62,75 +53,125 @@ model Label {
   name        String
   fileUrl     String
   workspaceId String
+  isDemo      Boolean        @default(false)
   workspace   Workspace      @relation(fields: [workspaceId], references: [id])
   versions    LabelVersion[]
-  isDemo      Boolean @default(false)
-}
-
-enum LabelStatus {
-  SCANNED   // Automatically set after scan
-  PENDING   // (Unused, reserved for future)
-  APPROVED  // Reviewer approved this version
-  REJECTED  // Reviewer rejected this version
 }
 
 model LabelVersion {
-  id         String         @id @default(uuid())
-  labelId    String
-  label      Label          @relation(fields: [labelId], references: [id])
-  status     LabelStatus    // SCANNED: auto after upload, APPROVED/REJECTED: set by reviewer
-  extraction Json
-  overallScore Int?
+  id             String      @id @default(uuid())
+  labelId        String
+  extraction     Json
+  analyzedAt     DateTime    @default(now())
   compliantItems Json?
-  analyzedAt DateTime @default(now())
-  nextSteps Json?
-  violations Violation[]
-  reviewComment String? // Optional reviewer comment for approval/rejection
-  approvedBy String? // User ID who approved this version
-  rejectedBy String? // User ID who rejected this version
-  approvedAt DateTime? // When this version was approved
-  rejectedAt DateTime? // When this version was rejected
+  overallScore   Int?
+  nextSteps      Json?
+  status         LabelStatus
+  reviewComment  String?
+  approvedAt     DateTime?
+  approvedBy     String?
+  rejectedAt     DateTime?
+  rejectedBy     String?
+  label          Label       @relation(fields: [labelId], references: [id])
+  violations     Violation[]
 }
 
 model Violation {
-  id         String   @id @default(uuid())
-  versionId  String
+  id           String       @id @default(uuid())
+  versionId    String
+  type         String
+  message      String
+  suggestion   String
+  citation     String
+  category     String?      @default("General")
+  location     String?
+  severity     String?      @default("medium")
   labelVersion LabelVersion @relation(fields: [versionId], references: [id])
-  type       String
-  message    String
-  suggestion String
-  citation   String
-  severity   String? @default("medium")
-  category   String? @default("General")
-  location   String?
 }
 
 model Report {
-  id          String   @id @default(uuid())
-  name        String
-  type        String   // monthly, quarterly, custom
-  status      String   @default("generating") // generating, completed, failed
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  generatedAt DateTime @default(now())
-  dateRange   Json     // { start: Date, end: Date }
-  filters     Json     // { productLines: string[], includeViolations: boolean, etc. }
-  summary     Json?    // { totalProducts: number, avgComplianceScore: number, etc. }
-  downloadUrl String?
-  expiresAt   DateTime?
-  progress    Int      @default(0)
+  id                  String    @id @default(uuid())
+  name                String
+  type                String
+  status              String    @default("generating")
+  workspaceId         String
+  generatedAt         DateTime  @default(now())
+  dateRange           Json
+  filters             Json
+  summary             Json?
+  downloadUrl         String?
+  expiresAt           DateTime?
+  progress            Int       @default(0)
   estimatedCompletion DateTime?
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
 }
 
 model UserProfile {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id])
+  id                String            @id @default(uuid())
+  userId            String            @unique
   companyType       CompanyType
   teamSize          TeamSize
   labelsPerMonth    LabelsPerMonth
   goals             Goals[]
   complianceProcess ComplianceProcess
+  user              User              @relation(fields: [userId], references: [id])
+}
+
+model Invitation {
+  id          String    @id @default(uuid())
+  email       String
+  workspaceId String
+  role        Role
+  status      String    @default("invited")
+  invitedAt   DateTime  @default(now())
+  invitedById String
+  acceptedAt  DateTime?
+  expiresAt   DateTime  @default(dbgenerated("(now() + '2 days'::interval)"))
+  token       String
+  invitedBy   User      @relation("InvitedByUser", fields: [invitedById], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  workspaceId String?
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+  read        Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  expiresAt   DateTime?
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([workspaceId])
+}
+
+enum Role {
+  ADMIN
+  REVIEWER
+  VIEWER
+}
+
+enum LabelStatus {
+  SCANNED
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum CompanyType {
@@ -169,50 +210,6 @@ enum ComplianceProcess {
   IN_HOUSE_TEAM
   MANUAL_REVIEW
   NO_FORMAL_PROCESS
-}
-
-model Invitation {
-  id           String   @id @default(uuid())
-  email        String
-  workspaceId  String
-  workspace    Workspace @relation(fields: [workspaceId], references: [id])
-  role         Role
-  status       String   @default("invited") // invited, accepted, expired, cancelled
-  invitedAt    DateTime @default(now())
-  invitedById  String
-  invitedBy    User     @relation("InvitedByUser", fields: [invitedById], references: [id])
-  acceptedAt   DateTime?
-  expiresAt    DateTime @default(dbgenerated("now() + interval '2 days'"))
-  token        String   // Secure random token for invite acceptance
-}
-
-model PasswordResetToken {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-}
-
-model Notification {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspaceId String?
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  type        NotificationType
-  title       String
-  message     String
-  data        Json?    // Additional data for the notification
-  read        Boolean  @default(false)
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime?
-  
-  @@index([userId, read])
-  @@index([workspaceId])
 }
 
 enum NotificationType {
