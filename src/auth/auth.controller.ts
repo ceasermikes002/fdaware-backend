@@ -24,6 +24,7 @@ export class AuthController {
       lastName: user.lastName,
       name: `${user.firstName || ''}${user.lastName ? ' ' + user.lastName : ''}`.trim(),
       profileImage: user.profileImage,
+      onboardingComplete: !!(user as any).onboardingComplete,
       token,
     };
   }
@@ -55,4 +56,6 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
+
+
 }
