@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
 import * as handlebars from 'handlebars';
 import { emailTransporter, EMAIL_FROM } from '../../config/email.config';
 import * as fs from 'fs';
@@ -18,7 +17,9 @@ export class EmailService {
     templateName: string;
     context: Record<string, any>;
   }) {
-    const templatePath = path.join(__dirname, '../../../templates', `${templateName}.hbs`);
+    const distPath = path.join(__dirname, '../../../templates', `${templateName}.hbs`);
+    const rootPath = path.join(process.cwd(), 'templates', `${templateName}.hbs`);
+    const templatePath = fs.existsSync(distPath) ? distPath : rootPath;
     const source = fs.readFileSync(templatePath, 'utf8');
     const compiledTemplate = handlebars.compile(source);
     const html = compiledTemplate(context);

@@ -21,7 +21,7 @@ export class WorkspaceRoleGuard implements CanActivate {
     // Find user's role in workspace
     const membership = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: user.id } });
     if (!membership) throw new ForbiddenException('Not a member of this workspace');
-    req.user.role = membership.role === 'REVIEWER' ? 'member' : membership.role.toLowerCase();
+    req.user.role = membership.role === 'REVIEWER' ? 'reviewer' : membership.role.toLowerCase();
     return true;
   }
-} 
+}

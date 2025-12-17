@@ -1,3 +1,3 @@
 export class ChangeRoleDto {
-  role: 'admin' | 'member' | 'viewer';
-} 
+  role: 'admin' | 'reviewer' | 'viewer';
+}

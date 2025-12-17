@@ -53,13 +53,13 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
   [
     {
       "user": { "id": "uuid", "email": "user@email.com", "name": "Jane Doe" },
-      "role": "admin" | "member" | "viewer",
+      "role": "admin" | "reviewer" | "viewer",
       "status": "active",
       "invitedAt": null
     },
     {
       "user": { "id": null, "email": "invitee@email.com", "name": "invitee@email.com" },
-      "role": "member",
+      "role": "reviewer",
       "status": "invited",
       "invitedAt": "2025-07-05T01:02:08.592Z",
       "inviteId": "1234-5678-9012-3456"
@@ -74,14 +74,14 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
   - `Authorization: Bearer <token>` (admin only)
 - **Body:**
   ```json
-  { "email": "invitee@email.com", "role": "member" }
+  { "email": "invitee@email.com", "role": "reviewer" }
   ```
 - **Returns:**
   ```json
   {
     "inviteId": "uuid",
     "email": "invitee@email.com",
-    "role": "member",
+    "role": "reviewer",
     "status": "invited",
     "invitedAt": "2025-07-05T01:02:08.592Z"
   }
@@ -129,7 +129,7 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
     "invite": {
       "id": "uuid",
       "email": "invitee@email.com",
-      "role": "member",
+      "role": "reviewer",
       "invitedAt": "2025-07-05T01:02:08.592Z",
       "expiresAt": "2025-07-07T01:02:08.592Z"
     },
@@ -175,11 +175,11 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
   - `Authorization: Bearer <token>` (admin only)
 - **Body:**
   ```json
-  { "role": "admin" | "member" | "viewer" }
+  { "role": "admin" | "reviewer" | "viewer" }
   ```
 - **Returns:**
   ```json
-  { "message": "Role updated", "userId": "uuid", "role": "member" }
+  { "message": "Role updated", "userId": "uuid", "role": "reviewer" }
   ```
 
 ### 11. Leave Workspace
@@ -200,7 +200,7 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
 - **Invitations** expire after 2 days, are token-protected, and can be resent/cancelled.
 - **Role mapping:**
   - `admin` → full access
-  - `member` (reviewer) → can view, upload, and update
+  - `reviewer` → can view, upload, and update
   - `viewer` → can only view
 - **All endpoints require authentication and workspace membership,**
   - **EXCEPT:** `GET /workspaces/:workspaceId/invites/:inviteId/validate` (public)
@@ -235,7 +235,7 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
 ```json
 {
   "user": { "id": "uuid" | null, "email": "user@email.com", "name": "Jane Doe" },
-  "role": "admin" | "member" | "viewer",
+  "role": "admin" | "reviewer" | "viewer",
   "status": "active" | "invited",
   "invitedAt": "2025-07-05T01:02:08.592Z" | null,
   "inviteId": "uuid" // Only present for pending invites
@@ -247,7 +247,7 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
 {
   "inviteId": "uuid",
   "email": "invitee@email.com",
-  "role": "member",
+  "role": "reviewer",
   "status": "invited",
   "invitedAt": "2025-07-05T01:02:08.592Z"
 }
@@ -257,7 +257,7 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
 
 ## Role-based Access in Labels
 - **Admins:** Full CRUD on labels in their workspace.
-- **Members (Reviewers):** Can upload, view, and update labels, but cannot delete.
+- **Reviewers:** Can upload, view, and update labels, but cannot delete.
 - **Viewers:** Can only view labels and download/preview files.
 - Enforced via `WorkspaceRoleGuard` and `@Roles` decorator in the labels module.
 
@@ -299,3 +299,30 @@ The Workspace module manages workspaces, team membership, roles, invitations, an
 ---
 
 **This module is robust, secure, and ready for production. For questions or to extend functionality, see the code comments or contact the FDAware backend team.** 
+# Workspaces
+## Invites & Email Delivery
+- SMTP env variables required:
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- For Gmail:
+  - Enable 2FA and create an App Password.
+  - Use the 16-character app password without spaces and without quotes: `SMTP_PASS=xxxxxxxxxxxxxxxx`
+  - `SMTP_PORT=587` (STARTTLS) or `465` (SSL, set `secure=true`).
+  - `SMTP_FROM` should match the authenticated account or a verified alias.
+- Strict behavior:
+  - If email delivery fails, the API responds with an error and rolls back any membership or invitation created.
+  - Resend invite also fails when email delivery fails and does not update `invitedAt`.
+
+## Endpoints Summary
+- Adding existing user to workspace:
+  - If email fails, the operation fails and membership is rolled back.
+- Inviting new user (not yet signed up):
+  - If email fails, the operation fails and the invitation is not persisted.
+  - On email success, the invitation persists; after signup, the user can accept with `inviteId` + `token`.
+- Resend invite:
+  - Succeeds only if email delivery succeeds; updates `invitedAt` and returns `resent: true`.
+
+## Post‑Signup Acceptance Flow
+- User signs up using the email that was invited.
+- Frontend calls `GET /workspaces/:workspaceId/invites/:inviteId/validate?token=...` to validate.
+- Authenticated user calls `POST /workspaces/:workspaceId/invites/:inviteId/accept` with the `token` to join.
+- Server ensures invite email matches user email; creates `WorkspaceUser`.

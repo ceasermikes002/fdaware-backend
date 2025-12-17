@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../common/utils/email.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
@@ -34,19 +40,37 @@ export class WorkspaceService {
     return this.prisma.workspace.findMany();
   }
 
-  async inviteMember(workspaceId: string, dto: InviteMemberDto, inviter: { id: string, name?: string; firstName?: string; lastName?: string; email?: string }) {
+  async inviteMember(
+    workspaceId: string,
+    dto: InviteMemberDto,
+    inviter: {
+      id: string;
+      name?: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    },
+  ) {
     // 1. Check if user already exists
-    const existingUser = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     // 2. Check if user is already a member
     if (existingUser) {
-      const existingMembership = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: existingUser.id } });
-      if (existingMembership) throw new Error('User is already a member of this workspace');
+      const existingMembership = await this.prisma.workspaceUser.findFirst({
+        where: { workspaceId, userId: existingUser.id },
+      });
+      if (existingMembership)
+        throw new Error('User is already a member of this workspace');
       // Add user to workspace and send notification email
       let role: 'ADMIN' | 'REVIEWER' | 'VIEWER';
       if (dto.role === 'admin') role = 'ADMIN';
       else if (dto.role === 'reviewer') role = 'REVIEWER';
       else if (dto.role === 'viewer') role = 'VIEWER';
-      else throw new BadRequestException('Invalid role. Only admin, reviewer, or viewer are allowed.');
+      else
+        throw new BadRequestException(
+          'Invalid role. Only admin, reviewer, or viewer are allowed.',
+        );
       await this.prisma.workspaceUser.create({
         data: {
           userId: existingUser.id,
@@ -55,30 +79,49 @@ export class WorkspaceService {
         },
       });
       // Send notification email (like invite)
-      const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
-      const workspaceName = workspace?.name || workspaceId;
-      const frontendUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/workspaces/${workspaceId}`;
-      // Robust inviterName fallback
-      const inviterName = inviter.name || (inviter.firstName && inviter.lastName ? `${inviter.firstName} ${inviter.lastName}` : inviter.email) || 'an FDAware user';
-      await this.emailService.sendTemplateMail({
-        to: dto.email,
-        subject: `You've been added to ${workspaceName} (by ${inviterName}) on FDAware!`,
-        templateName: 'invite',
-        context: {
-          inviterName,
-          workspaceName,
-          acceptUrl: frontendUrl,
-          frontendAcceptUrl: frontendUrl,
-          year: new Date().getFullYear(),
-        },
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
       });
-      
+      const workspaceName = workspace?.name || workspaceId;
+      const frontendUrl = `${
+        process.env.FRONTEND_URL || 'http://localhost:3000'
+      }/dashboard?workspaceId=${workspaceId}`; // Robust inviterName fallback
+      const inviterName =
+        inviter.name ||
+        (inviter.firstName && inviter.lastName
+          ? `${inviter.firstName} ${inviter.lastName}`
+          : inviter.email) ||
+        'an FDAware user';
+      try {
+        await this.emailService.sendTemplateMail({
+          to: dto.email,
+          subject: `You've been added to ${workspaceName} (by ${inviterName}) on FDAware!`,
+          templateName: 'invite',
+          context: {
+            inviterName,
+            workspaceName,
+            acceptUrl: frontendUrl,
+            frontendAcceptUrl: frontendUrl,
+            year: new Date().getFullYear(),
+          },
+        });
+      } catch {
+        await this.prisma.workspaceUser.delete({
+          where: {
+            id: (await this.prisma.workspaceUser.findFirst({
+              where: { workspaceId, userId: existingUser.id },
+            }))!.id,
+          },
+        });
+        throw new BadRequestException('Failed to send invite email');
+      }
+
       // Create notification for the added user
       await this.notificationsService.createWorkspaceInviteNotification(
         existingUser.id,
         workspaceId,
         inviterName,
-        workspaceName
+        workspaceName,
       );
       return {
         userId: existingUser.id,
@@ -101,7 +144,10 @@ export class WorkspaceService {
     if (dto.role === 'admin') role = 'ADMIN';
     else if (dto.role === 'reviewer') role = 'REVIEWER';
     else if (dto.role === 'viewer') role = 'VIEWER';
-    else throw new BadRequestException('Invalid role. Only admin, reviewer, or viewer are allowed.');
+    else
+      throw new BadRequestException(
+        'Invalid role. Only admin, reviewer, or viewer are allowed.',
+      );
     const invite = await this.prisma.invitation.create({
       data: {
         email: dto.email,
@@ -112,25 +158,41 @@ export class WorkspaceService {
       },
     });
     // 6. Send invitation email
-    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     const workspaceName = workspace?.name || workspaceId;
     const acceptUrl = `${BASE_URL}/workspaces/${workspaceId}/invites/${invite.id}/accept?token=${token}`;
-    const frontendAcceptUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invite?workspaceId=${workspaceId}&inviteId=${invite.id}&token=${token}`;
+    const frontendAcceptUrl = `${
+      process.env.FRONTEND_URL || 'http://localhost:3000'
+    }/accept-invite?workspaceId=${workspaceId}&inviteId=${
+      invite.id
+    }&token=${token}`;
     // Robust inviterName fallback
-    const inviterName = inviter.name || (inviter.firstName && inviter.lastName ? `${inviter.firstName} ${inviter.lastName}` : inviter.email) || 'an FDAware user';
-    await this.emailService.sendTemplateMail({
-      to: dto.email,
-      subject: `You're invited to join ${workspaceName} (invited by ${inviterName}) on FDAware!`,
-      templateName: 'invite',
-      context: {
-        inviterName,
-        workspaceName,
-        acceptUrl,
-        frontendAcceptUrl,
-        year: new Date().getFullYear(),
-      },
-    });
-    
+    const inviterName =
+      inviter.name ||
+      (inviter.firstName && inviter.lastName
+        ? `${inviter.firstName} ${inviter.lastName}`
+        : inviter.email) ||
+      'an FDAware user';
+    try {
+      await this.emailService.sendTemplateMail({
+        to: dto.email,
+        subject: `You're invited to join ${workspaceName} (invited by ${inviterName}) on FDAware!`,
+        templateName: 'invite',
+        context: {
+          inviterName,
+          workspaceName,
+          acceptUrl,
+          frontendAcceptUrl,
+          year: new Date().getFullYear(),
+        },
+      });
+    } catch {
+      await this.prisma.invitation.delete({ where: { id: invite.id } });
+      throw new BadRequestException('Failed to send invitation email');
+    }
+
     // Note: For new invitations, we'll create the notification when they accept the invite
     // since they don't have a user account yet
     return {
@@ -153,19 +215,22 @@ export class WorkspaceService {
       where: { workspaceId, status: 'invited' },
     });
     // Format members
-    const members = workspaceUsers.map(wu => ({
+    const members = workspaceUsers.map((wu) => ({
       user: {
         id: wu.user.id,
         email: wu.user.email,
-        name: wu.user.firstName && wu.user.lastName ? `${wu.user.firstName} ${wu.user.lastName}` : wu.user.email,
-        profileImage: wu.user.profileImage, 
+        name:
+          wu.user.firstName && wu.user.lastName
+            ? `${wu.user.firstName} ${wu.user.lastName}`
+            : wu.user.email,
+        profileImage: wu.user.profileImage,
       },
       role: wu.role.toLowerCase(),
       status: 'active',
       invitedAt: null,
     }));
     // Format invites
-    const pending = invites.map(invite => ({
+    const pending = invites.map((invite) => ({
       user: {
         id: null,
         email: invite.email,
@@ -181,34 +246,55 @@ export class WorkspaceService {
 
   async resendInvite(workspaceId: string, inviteId: string, user: any) {
     // Find the invitation
-    const invite = await this.prisma.invitation.findUnique({ where: { id: inviteId } });
-    if (!invite || invite.workspaceId !== workspaceId) throw new Error('Invite not found');
-    if (invite.status !== 'invited') throw new Error('Cannot resend: invite is not pending');
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: inviteId },
+    });
+    if (!invite || invite.workspaceId !== workspaceId)
+      throw new Error('Invite not found');
+    if (invite.status !== 'invited')
+      throw new Error('Cannot resend: invite is not pending');
     // Get inviter info
-    const inviter = await this.prisma.user.findUnique({ where: { id: user.id } });
+    const inviter = await this.prisma.user.findUnique({
+      where: { id: user.id },
+    });
     // Get workspace name
-    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     const workspaceName = workspace?.name || workspaceId;
     // Resend email
     const { BASE_URL } = await import('../config/email.config');
     const acceptUrl = `${BASE_URL}/workspaces/${workspaceId}/invites/${invite.id}/accept?token=${invite.token}`;
-    const frontendAcceptUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invite?workspaceId=${workspaceId}&inviteId=${invite.id}&token=${invite.token}`;
+    const frontendAcceptUrl = `${
+      process.env.FRONTEND_URL || 'http://localhost:3000'
+    }/accept-invite?workspaceId=${workspaceId}&inviteId=${invite.id}&token=${
+      invite.token
+    }`;
     // Robust inviterName fallback
-    const inviterName = inviter?.firstName && inviter?.lastName ? `${inviter.firstName} ${inviter.lastName}` : inviter?.email || 'an FDAware user';
-    await this.emailService.sendTemplateMail({
-      to: invite.email,
-      subject: `You're invited to join ${workspaceName} (invited by ${inviterName}) on FDAware!`,
-      templateName: 'invite',
-      context: {
-        inviterName,
-        workspaceName,
-        acceptUrl,
-        frontendAcceptUrl,
-        year: new Date().getFullYear(),
-      },
-    });
-    // Update invitedAt
-    await this.prisma.invitation.update({ where: { id: inviteId }, data: { invitedAt: new Date() } });
+    const inviterName =
+      inviter?.firstName && inviter?.lastName
+        ? `${inviter.firstName} ${inviter.lastName}`
+        : inviter?.email || 'an FDAware user';
+    try {
+      await this.emailService.sendTemplateMail({
+        to: invite.email,
+        subject: `You're invited to join ${workspaceName} (invited by ${inviterName}) on FDAware!`,
+        templateName: 'invite',
+        context: {
+          inviterName,
+          workspaceName,
+          acceptUrl,
+          frontendAcceptUrl,
+          year: new Date().getFullYear(),
+        },
+      });
+      await this.prisma.invitation.update({
+        where: { id: inviteId },
+        data: { invitedAt: new Date() },
+      });
+    } catch {
+      throw new BadRequestException('Failed to resend invitation');
+    }
     return {
       inviteId: invite.id,
       email: invite.email,
@@ -220,9 +306,13 @@ export class WorkspaceService {
   }
 
   async cancelInvite(workspaceId: string, inviteId: string) {
-    const invite = await this.prisma.invitation.findUnique({ where: { id: inviteId } });
-    if (!invite || invite.workspaceId !== workspaceId) throw new Error('Invite not found');
-    if (invite.status !== 'invited') throw new Error('Cannot cancel: invite is not pending');
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: inviteId },
+    });
+    if (!invite || invite.workspaceId !== workspaceId)
+      throw new Error('Invite not found');
+    if (invite.status !== 'invited')
+      throw new Error('Cannot cancel: invite is not pending');
     const updated = await this.prisma.invitation.update({
       where: { id: inviteId },
       data: { status: 'cancelled' },
@@ -237,33 +327,47 @@ export class WorkspaceService {
     };
   }
 
-  async acceptInvite(workspaceId: string, inviteId: string, token: string, user: any) {
-    const invite = await this.prisma.invitation.findUnique({ where: { id: inviteId } });
-    if (!invite || invite.workspaceId !== workspaceId) throw new NotFoundException('Invite not found');
-    if (invite.status !== 'invited') throw new BadRequestException('Invite is not pending');
-    if (invite.token !== token) throw new BadRequestException('Invalid invite token');
-    
+  async acceptInvite(
+    workspaceId: string,
+    inviteId: string,
+    token: string,
+    user: any,
+  ) {
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: inviteId },
+    });
+    if (!invite || invite.workspaceId !== workspaceId)
+      throw new NotFoundException('Invite not found');
+    if (invite.status !== 'invited')
+      throw new BadRequestException('Invite is not pending');
+    if (invite.token !== token)
+      throw new BadRequestException('Invalid invite token');
+
     // Verify the user's email matches the invite
     if (user.email !== invite.email) {
-      throw new BadRequestException('You can only accept invitations sent to your email address');
+      throw new BadRequestException(
+        'You can only accept invitations sent to your email address',
+      );
     }
-    
+
     // Check if user is already a member
-    const existing = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: user.id } });
+    const existing = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId: user.id },
+    });
     if (existing) throw new BadRequestException('User is already a member');
-    
+
     // Accept invite
     await this.prisma.invitation.update({
       where: { id: inviteId },
       data: { status: 'accepted', acceptedAt: new Date() },
     });
-    
+
     // Map role
     let role: 'ADMIN' | 'REVIEWER' | 'VIEWER';
     if (invite.role === 'ADMIN') role = 'ADMIN';
     else if (invite.role === 'REVIEWER') role = 'REVIEWER';
     else role = 'VIEWER';
-    
+
     // Add to workspace
     await this.prisma.workspaceUser.create({
       data: {
@@ -272,24 +376,31 @@ export class WorkspaceService {
         role,
       },
     });
-    
-    return { 
-      message: 'Invitation accepted', 
-      workspaceId, 
-      userId: user.id, 
-      role: role.toLowerCase() 
+
+    return {
+      message: 'Invitation accepted',
+      workspaceId,
+      userId: user.id,
+      role: role.toLowerCase(),
     };
   }
 
   async validateInvite(workspaceId: string, inviteId: string, token: string) {
-    const invite = await this.prisma.invitation.findUnique({ where: { id: inviteId } });
-    if (!invite || invite.workspaceId !== workspaceId) throw new NotFoundException('Invite not found');
-    if (invite.status !== 'invited') throw new BadRequestException('Invite is not pending');
-    if (invite.token !== token) throw new BadRequestException('Invalid invite token');
-    
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id: inviteId },
+    });
+    if (!invite || invite.workspaceId !== workspaceId)
+      throw new NotFoundException('Invite not found');
+    if (invite.status !== 'invited')
+      throw new BadRequestException('Invite is not pending');
+    if (invite.token !== token)
+      throw new BadRequestException('Invalid invite token');
+
     // Get workspace info
-    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
-    
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
     return {
       valid: true,
       invite: {
@@ -302,7 +413,7 @@ export class WorkspaceService {
       workspace: {
         id: workspace.id,
         name: workspace.name,
-      }
+      },
     };
   }
 
@@ -312,7 +423,7 @@ export class WorkspaceService {
   //   if (!invite) {
   //     return { error: 'Invite not found' };
   //   }
-    
+
   //   return {
   //     invite: {
   //       id: invite.id,
@@ -329,49 +440,90 @@ export class WorkspaceService {
   // }
 
   async removeMember(workspaceId: string, userId: string, user: any) {
-    if (user.id === userId) throw new BadRequestException('Use leave workspace to remove yourself');
+    if (user.id === userId)
+      throw new BadRequestException('Use leave workspace to remove yourself');
     // Check if user is an admin
-    const acting = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: user.id } });
-    if (!acting || acting.role !== 'ADMIN') throw new BadRequestException('Only admins can remove members');
+    const acting = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId: user.id },
+    });
+    if (!acting || acting.role !== 'ADMIN')
+      throw new BadRequestException('Only admins can remove members');
     // Check if target is last admin
-    const target = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId } });
+    const target = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId },
+    });
     if (!target) throw new BadRequestException('User is not a member');
     if (target.role === 'ADMIN') {
-      const adminCount = await this.prisma.workspaceUser.count({ where: { workspaceId, role: 'ADMIN' } });
-      if (adminCount <= 1) throw new BadRequestException('Cannot remove the last admin from the workspace');
+      const adminCount = await this.prisma.workspaceUser.count({
+        where: { workspaceId, role: 'ADMIN' },
+      });
+      if (adminCount <= 1)
+        throw new BadRequestException(
+          'Cannot remove the last admin from the workspace',
+        );
     }
     await this.prisma.workspaceUser.delete({ where: { id: target.id } });
     return { message: 'Member removed', userId };
   }
 
-  async changeRole(workspaceId: string, userId: string, role: 'admin' | 'reviewer' | 'viewer', user: any) {
-    if (user.id === userId) throw new BadRequestException('Cannot change your own role');
+  async changeRole(
+    workspaceId: string,
+    userId: string,
+    role: 'admin' | 'reviewer' | 'viewer',
+    user: any,
+  ) {
+    if (user.id === userId)
+      throw new BadRequestException('Cannot change your own role');
     // Check if user is an admin
-    const acting = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: user.id } });
-    if (!acting || acting.role !== 'ADMIN') throw new BadRequestException('Only admins can change roles');
+    const acting = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId: user.id },
+    });
+    if (!acting || acting.role !== 'ADMIN')
+      throw new BadRequestException('Only admins can change roles');
     // Check if target is last admin and being demoted
-    const target = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId } });
+    const target = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId },
+    });
     if (!target) throw new BadRequestException('User is not a member');
     let newRole: 'ADMIN' | 'REVIEWER' | 'VIEWER';
     if (role === 'admin') newRole = 'ADMIN';
     else if (role === 'reviewer') newRole = 'REVIEWER';
     else if (role === 'viewer') newRole = 'VIEWER';
-    else throw new BadRequestException('Invalid role. Only admin, reviewer, or viewer are allowed.');
+    else
+      throw new BadRequestException(
+        'Invalid role. Only admin, reviewer, or viewer are allowed.',
+      );
     if (target.role === 'ADMIN' && newRole !== 'ADMIN') {
-      const adminCount = await this.prisma.workspaceUser.count({ where: { workspaceId, role: 'ADMIN' } });
-      if (adminCount <= 1) throw new BadRequestException('Cannot demote the last admin in the workspace');
+      const adminCount = await this.prisma.workspaceUser.count({
+        where: { workspaceId, role: 'ADMIN' },
+      });
+      if (adminCount <= 1)
+        throw new BadRequestException(
+          'Cannot demote the last admin in the workspace',
+        );
     }
-    await this.prisma.workspaceUser.update({ where: { id: target.id }, data: { role: newRole } });
+    await this.prisma.workspaceUser.update({
+      where: { id: target.id },
+      data: { role: newRole },
+    });
     return { message: 'Role updated', userId, role };
   }
 
   async leaveWorkspace(workspaceId: string, user: any) {
     // Check if user is a member
-    const member = await this.prisma.workspaceUser.findFirst({ where: { workspaceId, userId: user.id } });
-    if (!member) throw new BadRequestException('You are not a member of this workspace');
+    const member = await this.prisma.workspaceUser.findFirst({
+      where: { workspaceId, userId: user.id },
+    });
+    if (!member)
+      throw new BadRequestException('You are not a member of this workspace');
     if (member.role === 'ADMIN') {
-      const adminCount = await this.prisma.workspaceUser.count({ where: { workspaceId, role: 'ADMIN' } });
-      if (adminCount <= 1) throw new BadRequestException('Cannot leave as the last admin in the workspace');
+      const adminCount = await this.prisma.workspaceUser.count({
+        where: { workspaceId, role: 'ADMIN' },
+      });
+      if (adminCount <= 1)
+        throw new BadRequestException(
+          'Cannot leave as the last admin in the workspace',
+        );
     }
     await this.prisma.workspaceUser.delete({ where: { id: member.id } });
     return { message: 'You have left the workspace', userId: user.id };
@@ -393,10 +545,10 @@ export class WorkspaceService {
     });
     // Collect unique workspaces
     const workspaceMap = new Map();
-    memberships.forEach(m => {
+    memberships.forEach((m) => {
       if (m.workspace) workspaceMap.set(m.workspace.id, m.workspace);
     });
-    acceptedInvites.forEach(i => {
+    acceptedInvites.forEach((i) => {
       if (i.workspace) workspaceMap.set(i.workspace.id, i.workspace);
     });
     return Array.from(workspaceMap.values());

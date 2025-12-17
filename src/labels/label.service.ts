@@ -4,6 +4,7 @@ import { ScanService } from '../scan/scan.service';
 import { S3Service } from './s3.service';
 import { LabelStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BillingService } from '../billing/billing.service';
 
 const DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID; // Loaded via dotenv in main
 if (!DEMO_WORKSPACE_ID) {
@@ -18,10 +19,11 @@ export class LabelService {
     private s3Service: S3Service,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    private readonly billingService: BillingService,
   ) {}
-  // TODO: Implement label CRUD and S3 upload logic
 
   async createLabelWithFile(name: string, fileUrl: string, workspaceId: string, presignedUrl?: string) {
+    await this.billingService.assertCanScan(workspaceId);
     // 1. Create the Label
     const label = await this.prisma.label.create({
       data: { name, fileUrl, workspaceId },
@@ -340,6 +342,7 @@ export class LabelService {
       throw new Error('Label not found');
     }
 
+    await this.billingService.assertCanScan(label.workspaceId);
     // 2. Call ML scan service with the presignedUrl if provided, else fileUrl
     let scanResult;
     try {

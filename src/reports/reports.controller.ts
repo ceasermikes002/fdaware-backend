@@ -3,7 +3,10 @@ import { ReportsService } from './reports.service';
 import { GenerateReportDto } from './dto/generate-report.dto';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { Roles } from '../common/decorators';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('reports')
+@ApiBearerAuth()
 @Controller('reports')
 @UseGuards(AuthGuard)
 export class ReportsController {
@@ -53,4 +56,4 @@ export class ReportsController {
   async deleteReport(@Param('reportId') reportId: string) {
     return this.reportsService.deleteReport(reportId);
   }
-} 
+}

@@ -2,10 +2,15 @@ import { Controller, Post, Body, Get, Param, UseGuards, Req, Delete, Put, Query 
 import { WorkspaceService } from './workspace.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
+import { ChangeRoleDto } from './dto/change-role.dto';
+import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { WorkspaceRoleGuard } from '../common/guards/workspace-role.guard';
 import { Roles } from '../common/decorators';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('workspaces')
+@ApiBearerAuth()
 @Controller('workspaces')
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
@@ -76,7 +81,7 @@ export class WorkspaceController {
 
   @Post(':workspaceId/invites/:inviteId/accept')
   @UseGuards(AuthGuard)
-  async acceptInvite(@Param('workspaceId') workspaceId: string, @Param('inviteId') inviteId: string, @Body() body: { token: string }, @Req() req: any) {
+  async acceptInvite(@Param('workspaceId') workspaceId: string, @Param('inviteId') inviteId: string, @Body() body: AcceptInviteDto, @Req() req: any) {
     return this.workspaceService.acceptInvite(workspaceId, inviteId, body.token, req.user);
   }
 
@@ -90,7 +95,7 @@ export class WorkspaceController {
   @Put(':workspaceId/members/:userId/role')
   @UseGuards(AuthGuard, WorkspaceRoleGuard)
   @Roles('admin')
-  async changeRole(@Param('workspaceId') workspaceId: string, @Param('userId') userId: string, @Body() body: { role: string }, @Req() req: any) {
+  async changeRole(@Param('workspaceId') workspaceId: string, @Param('userId') userId: string, @Body() body: ChangeRoleDto, @Req() req: any) {
     return this.workspaceService.changeRole(workspaceId, userId, body.role as 'admin' | 'reviewer' | 'viewer', req.user);
   }
 
@@ -99,4 +104,4 @@ export class WorkspaceController {
   async leaveWorkspace(@Param('workspaceId') workspaceId: string, @Req() req: any) {
     return this.workspaceService.leaveWorkspace(workspaceId, req.user);
   }
-} 
+}
