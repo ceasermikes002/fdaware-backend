@@ -26,9 +26,12 @@ import {
   MarkNotificationDto,
   BulkMarkNotificationsDto,
 } from './dto/query-notifications.dto';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
-@Controller('notifications')
+@ApiTags('notifications')
+@ApiBearerAuth()
 @UseGuards(AuthGuard)
+@Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
@@ -137,27 +140,6 @@ export class NotificationsController {
       data.userId,
       data.workspaceId,
       data.labelName,
-      data.labelId
-    );
-  }
-
-  @Post('compliance-issue')
-  @UseGuards(WorkspaceRoleGuard)
-  @Roles('admin', 'reviewer')
-  async createComplianceIssueNotification(
-    @Body() data: {
-      userId: string;
-      workspaceId: string;
-      labelName: string;
-      issueCount: number;
-      labelId: string;
-    }
-  ) {
-    return this.notificationsService.createComplianceIssueNotification(
-      data.userId,
-      data.workspaceId,
-      data.labelName,
-      data.issueCount,
       data.labelId
     );
   }

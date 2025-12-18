@@ -220,3 +220,6 @@ Update the profile of the currently authenticated user.
 ---
 
 For further details, see the code or contact the backend team.
+## Notes on Authorization
+- All protected endpoints require `Authorization: Bearer <jwt_token>`.
+- JWT is returned on login and must be included on subsequent requests.

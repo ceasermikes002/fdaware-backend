@@ -3,7 +3,10 @@ import { AuthGuard } from '../common/guards/auth.guard';
 import { UserService } from './user.service';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('users')
+@ApiBearerAuth()
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -32,4 +35,4 @@ export class UserController {
   async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
     return this.userService.changePassword(req.user.id, dto);
   }
-} 
+}

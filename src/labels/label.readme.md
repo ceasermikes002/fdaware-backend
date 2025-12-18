@@ -16,7 +16,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
     - `file`: PDF file to upload
     - `name`: Label name (string)
     - `workspaceId`: Workspace ID (string)
-  - **Roles:** `admin`, `member`
+  - **Roles:** `admin`, `reviewer`
   - **Returns:**
     ```json
     {
@@ -78,13 +78,13 @@ This module handles all label upload, analysis, versioning, and retrieval for th
   - **Headers:** `Authorization: Bearer <jwt_token>`
   - **Body:** `multipart/form-data`
     - `file`: PDF file to upload
-  - **Roles:** `admin`, `member`
+  - **Roles:** `admin`, `reviewer`
   - **Returns:** Same format as upload endpoint
 
 ### 3. Get All Labels (Latest Analysis)
 - **GET** `/labels?workspaceId=workspace-uuid`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:** Array of:
     ```json
     [
@@ -134,7 +134,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 ### 4. Get Single Label (Latest Analysis)
 - **GET** `/labels/:id`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:**
     ```json
     {
@@ -182,7 +182,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 ### 5. Get All Analyses (Versions) for a Label
 - **GET** `/labels/:id/versions`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:** Array of:
     ```json
     [
@@ -226,7 +226,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 ### 6. Get Specific Analysis Version
 - **GET** `/labels/:id/versions/:versionId`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:**
     ```json
     {
@@ -269,7 +269,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 - **PUT** `/labels/:labelId/versions/:versionId/approve`
   - **Headers:** `Authorization: Bearer <jwt_token>`
   - **Body:** `{ "reviewComment": "Optional review comment" }` (optional)
-  - **Roles:** `admin`, `member`
+  - **Roles:** `admin`, `reviewer`
   - **Returns:**
     ```json
     {
@@ -317,7 +317,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 - **PUT** `/labels/:labelId/versions/:versionId/reject`
   - **Headers:** `Authorization: Bearer <jwt_token>`
   - **Body:** `{ "reviewComment": "Optional review comment explaining rejection" }` (optional)
-  - **Roles:** `admin`, `member`
+  - **Roles:** `admin`, `reviewer`
   - **Returns:**
     ```json
     {
@@ -393,7 +393,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 ### 11. Download Label File
 - **GET** `/labels/:id/download`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:**
     ```json
     {
@@ -407,7 +407,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 ### 12. Preview Label File
 - **GET** `/labels/:id/preview`
   - **Headers:** `Authorization: Bearer <jwt_token>`
-  - **Roles:** `admin`, `member`, `viewer`
+  - **Roles:** `admin`, `reviewer`, `viewer`
   - **Returns:**
     ```json
     {
@@ -428,7 +428,7 @@ This module handles all label upload, analysis, versioning, and retrieval for th
 - Can manage all label versions
 - Can approve or reject label versions
 
-### Reviewer (`member`)
+### Reviewer (`reviewer`)
 - Can upload and update labels
 - Can view all label versions and analyses
 - Can approve or reject label versions

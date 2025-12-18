@@ -1,7 +1,10 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { AuthGuard } from '../common/guards/auth.guard';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('dashboard')
+@ApiBearerAuth()
 @Controller('dashboard')
 @UseGuards(AuthGuard)
 export class DashboardController {
@@ -21,4 +24,4 @@ export class DashboardController {
   async getActivity(@Query('workspaceId') workspaceId: string) {
     return this.dashboardService.getActivity(workspaceId);
   }
-} 
+}
