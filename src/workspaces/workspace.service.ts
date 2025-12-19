@@ -71,7 +71,7 @@ export class WorkspaceService {
         throw new BadRequestException(
           'Invalid role. Only admin, reviewer, or viewer are allowed.',
         );
-      await this.prisma.workspaceUser.create({
+      const membership = await this.prisma.workspaceUser.create({
         data: {
           userId: existingUser.id,
           workspaceId,
@@ -106,13 +106,7 @@ export class WorkspaceService {
           },
         });
       } catch {
-        await this.prisma.workspaceUser.delete({
-          where: {
-            id: (await this.prisma.workspaceUser.findFirst({
-              where: { workspaceId, userId: existingUser.id },
-            }))!.id,
-          },
-        });
+        await this.prisma.workspaceUser.delete({ where: { id: membership.id } });
         throw new BadRequestException('Failed to send invite email');
       }
 
