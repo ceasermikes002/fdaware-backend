@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ConfigController } from './config.controller';
 
 @Module({
-  // TODO: Provide config services (database, S3, ML, etc)
+  controllers: [ConfigController],
 })
-export class ConfigModule {} 
+export class ConfigModule {}
