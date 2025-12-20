@@ -33,12 +33,11 @@ export class LabelService {
     let scanResult;
     try {
       scanResult = await this.scanService.analyzeLabel({ file_url: presignedUrl || fileUrl });
-    } catch {
-      scanResult = { 
-        extraction: null, 
-        violations: [], 
-        analysis: { overallScore: 0, compliantItems: [] }
-      };
+    } catch (error) {
+      // If scan fails, delete the created label and rethrow
+      console.error('[LabelService] Scan failed, deleting label:', label.id);
+      await this.prisma.label.delete({ where: { id: label.id } });
+      throw error;
     }
 
     // 3. Create LabelVersion with extraction (if any)
@@ -344,16 +343,7 @@ export class LabelService {
 
     await this.billingService.assertCanScan(label.workspaceId);
     // 2. Call ML scan service with the presignedUrl if provided, else fileUrl
-    let scanResult;
-    try {
-      scanResult = await this.scanService.analyzeLabel({ file_url: presignedUrl || fileUrl });
-    } catch {
-      scanResult = { 
-        extraction: null, 
-        violations: [], 
-        analysis: { overallScore: 0, compliantItems: [], nextSteps: [] }
-      };
-    }
+    const scanResult = await this.scanService.analyzeLabel({ file_url: presignedUrl || fileUrl });
 
     // 3. Create new version for the existing label
     const version = await this.prisma.labelVersion.create({
@@ -423,8 +413,14 @@ export class LabelService {
       } 
     });
     // Run scan pipeline with presigned URL
-    const scanResult = await this.scanService.analyzeLabel({ file_url: presignedUrl });
-    return { label, scanResult };
+    try {
+      const scanResult = await this.scanService.analyzeLabel({ file_url: presignedUrl });
+      return { label, scanResult };
+    } catch (error) {
+      console.error('[LabelService] Demo scan failed, deleting label:', label.id);
+      await this.prisma.label.delete({ where: { id: label.id } });
+      throw error;
+    }
   }
 
   async updateLabelVersionStatus(labelId: string, versionId: string, status: 'APPROVED' | 'REJECTED', reviewComment?: string, userId?: string) {
