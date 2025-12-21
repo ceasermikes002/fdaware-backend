@@ -16,12 +16,14 @@ import {
   WebSocketNotification,
 } from './entities/notification.entity';
 import { NotificationsGateway } from './notifications.gateway';
+import { RedisCacheService } from '../common/utils/redis.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private notificationsGateway: NotificationsGateway,
+    private redisCache: RedisCacheService,
   ) {}
 
   async createNotification(dto: CreateNotificationDto): Promise<NotificationEntity> {
@@ -78,6 +80,7 @@ export class NotificationsService {
     };
     this.notificationsGateway.sendToUser(dto.userId, wsNotification);
 
+    await this.invalidateCache(dto.userId, dto.workspaceId);
     return notification;
   }
 
@@ -139,6 +142,9 @@ export class NotificationsService {
       this.notificationsGateway.sendToUser(notification.userId, wsNotification);
     });
 
+    for (const userId of dto.userIds) {
+      await this.invalidateCache(userId, dto.workspaceId);
+    }
     return notifications;
   }
 
@@ -146,6 +152,9 @@ export class NotificationsService {
     userId: string,
     query: QueryNotificationsDto
   ): Promise<{ notifications: NotificationEntity[]; total: number }> {
+    const cacheKey = this.cacheKeyForList(userId, query);
+    const cached = await this.redisCache.getJson<{ notifications: NotificationEntity[]; total: number }>(cacheKey);
+    if (cached) return cached;
     const where: any = {
       userId,
       AND: [
@@ -161,12 +170,19 @@ export class NotificationsService {
       ]
     };
 
+    const take = typeof (query.limit as any) === 'string'
+      ? parseInt(query.limit as any, 10)
+      : (query.limit ?? 20);
+    const skip = typeof (query.offset as any) === 'string'
+      ? parseInt(query.offset as any, 10)
+      : (query.offset ?? 0);
+
     const [notifications, total] = await Promise.all([
       this.prisma.notification.findMany({
         where,
-        orderBy: { [query.sortBy]: query.sortOrder },
-        take: query.limit,
-        skip: query.offset,
+        orderBy: { [(query.sortBy || 'createdAt')]: (query.sortOrder || 'desc') },
+        take,
+        skip,
         include: {
           workspace: {
             select: {
@@ -179,10 +195,15 @@ export class NotificationsService {
       this.prisma.notification.count({ where }),
     ]);
 
-    return { notifications, total };
+    const result = { notifications, total };
+    await this.redisCache.setJson(cacheKey, result, 30);
+    return result;
   }
 
   async getNotificationSummary(userId: string, workspaceId?: string): Promise<NotificationSummary> {
+    const cacheKey = this.cacheKeyForSummary(userId, workspaceId);
+    const cached = await this.redisCache.getJson<NotificationSummary>(cacheKey);
+    if (cached) return cached;
     const where: any = {
       userId,
       AND: [
@@ -216,7 +237,9 @@ export class NotificationsService {
       return acc;
     }, {} as Record<NotificationType, number>);
 
-    return { total, unread, byType, recent };
+    const result = { total, unread, byType, recent };
+    await this.redisCache.setJson(cacheKey, result, 30);
+    return result;
   }
 
   async markNotification(
@@ -250,6 +273,7 @@ export class NotificationsService {
     };
     this.notificationsGateway.sendToUser(userId, wsNotification);
 
+    await this.invalidateCache(userId, updated.workspaceId || undefined);
     return updated;
   }
 
@@ -289,6 +313,7 @@ export class NotificationsService {
       workspaceId,
     } as any);
 
+    await this.invalidateCache(userId, workspaceId);
     return { count: result.count };
   }
 
@@ -315,6 +340,7 @@ export class NotificationsService {
       userId,
     } as any);
 
+    await this.invalidateCache(userId);
     return { count: result.count };
   }
 
@@ -340,6 +366,7 @@ export class NotificationsService {
       workspaceId: notification.workspaceId,
     };
     this.notificationsGateway.sendToUser(userId, wsNotification);
+    await this.invalidateCache(userId, notification.workspaceId || undefined);
   }
 
   async cleanupExpiredNotifications(): Promise<{ count: number }> {
@@ -351,6 +378,7 @@ export class NotificationsService {
       },
     });
 
+    await this.redisCache.deleteByPrefix('notifications:user:');
     return { count: result.count };
   }
 
@@ -397,5 +425,28 @@ export class NotificationsService {
       message: `Report "${reportName}" has been generated and is ready for download`,
       data: { reportId, reportName },
     });
+  }
+
+  private cacheKeyForList(userId: string, query: QueryNotificationsDto): string {
+    const parts = [
+      userId,
+      query.workspaceId || '-',
+      query.type || '-',
+      String(query.read ?? '-'),
+      String(query.limit ?? 20),
+      String(query.offset ?? 0),
+      String(query.sortBy || 'createdAt'),
+      String(query.sortOrder || 'desc'),
+    ];
+    return `notifications:user:${parts.join(':')}:list`;
+  }
+
+  private cacheKeyForSummary(userId: string, workspaceId?: string): string {
+    return `notifications:user:${userId}:${workspaceId || '-'}:summary`;
+  }
+
+  private async invalidateCache(userId: string, workspaceId?: string) {
+    await this.redisCache.deleteByPrefix(`notifications:user:${userId}:`);
+    if (workspaceId) await this.redisCache.deleteByPrefix(`notifications:user:${userId}:${workspaceId}:`);
   }
 }

@@ -2,6 +2,8 @@
 
 ## Base URL
 
+`http://localhost:8080/api`
+
 ## Authentication
 All endpoints require authentication. Include the JWT token in the Authorization header:
 `Authorization: Bearer <jwt_token>`
@@ -9,7 +11,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ## Endpoints
 
 ### 1. Create Notification
-**POST** `/notifications`
+**POST** `/api/notifications`
 
 **Required Roles:** admin, reviewer
 
@@ -62,7 +64,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 2. Create Bulk Notifications
-**POST** `/notifications/bulk`
+**POST** `/api/notifications/bulk`
 
 **Required Roles:** admin
 
@@ -94,7 +96,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 3. Get User Notifications
-**GET** `/notifications`
+**GET** `/api/notifications`
 
 **Query Parameters:**
 - `workspaceId` (optional): Filter by workspace
@@ -133,10 +135,10 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 4. Get Notification Summary
-**GET** `/notifications/summary`
+**GET** `/api/notifications/summary`
 
 **Query Parameters:**
-- `workspaceId` (required): Workspace ID
+- `workspaceId` (optional): Workspace ID
 
 **Example Request:**
 
@@ -165,7 +167,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 5. Mark Notification as Read/Unread
-**PUT** `/notifications/:id/mark`
+**PUT** `/api/notifications/:id/mark`
 
 **Path Parameters:**
 - `id`: Notification ID
@@ -180,7 +182,27 @@ All endpoints require authentication. Include the JWT token in the Authorization
 **Example Request:**
 
 ### 7. Bulk Mark Notifications
-**PUT** `/notifications/bulk-mark`
+**PUT** `/api/notifications/bulk-mark`
+
+### 6. Mark All Notifications
+**PUT** `/api/notifications/mark-all`
+
+**Query Parameters:**
+- `workspaceId` (optional): Limit to a workspace
+
+**Request Body:**
+```json
+{
+  "read": true
+}
+```
+
+**Response:**
+```json
+{
+  "count": 12
+}
+```
 
 **Request Body:**
 ```json
@@ -191,7 +213,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 8. Delete Notification
-**DELETE** `/notifications/:id`
+**DELETE** `/api/notifications/:id`
 
 **Path Parameters:**
 - `id`: Notification ID
@@ -202,22 +224,21 @@ All endpoints require authentication. Include the JWT token in the Authorization
 **Response:** 204 No Content
 
 ### 9. Cleanup Expired Notifications
-**POST** `/notifications/cleanup`
+**POST** `/api/notifications/cleanup`
 
 **Required Roles:** admin
 
 **Response:**
 ```json
 {
-  "deletedCount": 15,
-  "message": "Expired notifications cleaned up successfully"
+  "count": 15
 }
 ```
 
 ## Helper Endpoints for Specific Notification Types
 
 ### 10. Create Label Analyzed Notification
-**POST** `/notifications/label-analyzed`
+**POST** `/api/notifications/label-analyzed`
 
 **Required Roles:** admin, reviewer
 
@@ -232,7 +253,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 11. Create Compliance Issue Notification
-**POST** `/notifications/compliance-issue`
+**POST** `/api/notifications/compliance-issue`
 
 **Required Roles:** admin, reviewer
 
@@ -248,7 +269,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 12. Create Workspace Invite Notification
-**POST** `/notifications/workspace-invite`
+**POST** `/api/notifications/workspace-invite`
 
 **Required Roles:** admin
 
@@ -263,7 +284,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 ```
 
 ### 13. Create Report Generated Notification
-**POST** `/notifications/report-generated`
+**POST** `/api/notifications/report-generated`
 
 **Required Roles:** admin, reviewer
 
@@ -330,7 +351,7 @@ All endpoints require authentication. Include the JWT token in the Authorization
 
 ## WebSocket Events
 
-The notifications system also supports real-time updates via WebSocket. Connect to:
+The notifications system also supports real-time updates via WebSocket. Connection includes JWT verification.
 
 
 **Event Format:**
@@ -353,7 +374,7 @@ The notifications system also supports real-time updates via WebSocket. Connect 
 
 1. Create a new collection named "Notifications API"
 2. Set collection variables:
-   - `baseUrl`: `http://localhost:3000`
+   - `baseUrl`: `http://localhost:8080/api`
    - `token`: `<your_jwt_token>`
 3. Add the Authorization header to the collection:
    - Key: `Authorization`
@@ -368,3 +389,40 @@ The notifications system also supports real-time updates via WebSocket. Connect 
 4. Test filtering with different query parameters
 5. Verify WebSocket connections for real-time notifications
 6. Test role-based access control with different user roles
+
+## Notification Settings (Basic)
+
+- Delivery channel: WebSocket only. Email/push are not implemented.
+- Enabled types: All `NotificationType` values are enabled by default.
+- Workspace scope: Filter in queries using `workspaceId`; no per-workspace preferences.
+- Auto mark-as-read: Disabled by default; explicit mark via `PUT /api/notifications/:id/mark`, `mark-all`, or `bulk-mark`.
+- Pagination defaults: `limit=20`, `offset=0`, `sortBy=createdAt`, `sortOrder=desc`.
+- Expiration: Optional per-notification `expiresAt`. Cleanup via `POST /api/notifications/cleanup`.
+- Realtime counters: Unread count sent on WebSocket connect; updated implicitly after mark operations.
+
+These defaults act as the current "settings". There is no persisted user preference model yet; behavior relies on the above conventions.
+
+## Caching
+
+- Cache: Redis-backed, enabled when `REDIS_ENABLED=true`.
+- Cached endpoints: `GET /api/notifications` (lists) and `GET /api/notifications/summary`.
+- TTL: 30 seconds per cache entry.
+- Invalidation: automatic on create, mark, bulk-mark, mark-all, delete, cleanup.
+- Key format: `notifications:user:{userId}:{workspaceId|-}:{type|-}:{read|-}:{limit}:{offset}:{sortBy}:{sortOrder}:list` and `notifications:user:{userId}:{workspaceId|-}:summary`.
+- Environment variables:
+  - `REDIS_ENABLED=true`
+  - `REDIS_USERNAME=default`
+  - `REDIS_PASSWORD=<set-by-you>`
+  - `REDIS_HOST=redis-16818.c274.us-east-1-3.ec2.cloud.redislabs.com`
+  - `REDIS_PORT=16818`
+
+Example client initialization (used internally):
+```
+import { createClient } from 'redis';
+const client = createClient({
+  username: process.env.REDIS_USERNAME || 'default',
+  password: process.env.REDIS_PASSWORD,
+  socket: { host: process.env.REDIS_HOST, port: Number(process.env.REDIS_PORT) },
+});
+await client.connect();
+```

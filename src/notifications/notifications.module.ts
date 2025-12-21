@@ -5,6 +5,7 @@ import { NotificationsGateway } from './notifications.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
+import { RedisCacheService } from '../common/utils/redis.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { JwtModule } from '@nestjs/jwt';
     }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsGateway],
+  providers: [NotificationsService, NotificationsGateway, RedisCacheService],
   exports: [NotificationsService],
 })
 export class NotificationsModule {}

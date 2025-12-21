@@ -6,7 +6,7 @@ import { CreateLabelDto } from './dto/create-label.dto';
 import { UpdateLabelDto } from './dto/update-label.dto';
 import { WorkspaceRoleGuard } from '../common/guards/workspace-role.guard';
 import { Roles } from '../common/decorators';
-import { AuthGuard } from 'src/common/guards/auth.guard';
+import { AuthGuard } from '../common/guards/auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('labels')
