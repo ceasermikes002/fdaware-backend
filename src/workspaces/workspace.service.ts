@@ -11,6 +11,7 @@ import { InviteMemberDto } from './dto/invite-member.dto';
 import { BASE_URL } from '../config/email.config';
 import { randomBytes } from 'crypto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PLAN_LIMITS } from '../billing/plan.config';
 
 @Injectable()
 export class WorkspaceService {
@@ -23,6 +24,18 @@ export class WorkspaceService {
   // TODO: Implement workspace CRUD and role management
 
   async createWorkspace(name: string, userId: string) {
+    const memberships = await this.prisma.workspaceUser.findMany({ where: { userId }, include: { workspace: true } });
+    const now = new Date();
+    const activePlans = memberships.map(m => m.workspace).filter(w => w && w.planExpiresAt && w.planExpiresAt > now) as any[];
+    const highestPlanOrder = (plan: 'LITE' | 'TEAM' | 'SCALE') => (plan === 'LITE' ? 1 : plan === 'TEAM' ? 2 : 3);
+    const bestPlan = activePlans.length
+      ? activePlans.reduce((a, b) => (highestPlanOrder((a as any).plan) >= highestPlanOrder((b as any).plan) ? a : b))
+      : null;
+    const maxWorkspaces = bestPlan ? PLAN_LIMITS[(bestPlan as any).plan].workspacesPerAccount : PLAN_LIMITS.LITE.workspacesPerAccount;
+    const currentWorkspaceCount = new Set(memberships.map(m => m.workspaceId)).size;
+    if (currentWorkspaceCount >= maxWorkspaces) {
+      throw new BadRequestException('Workspace limit reached for current plan');
+    }
     // 1. Create the workspace
     const workspace = await this.prisma.workspace.create({ data: { name } });
     // 2. Add the creator as ADMIN
@@ -51,6 +64,21 @@ export class WorkspaceService {
       email?: string;
     },
   ) {
+    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    if (!workspace) throw new BadRequestException('Workspace not found');
+    const demoWorkspaceId = process.env.DEMO_WORKSPACE_ID;
+    if (!(demoWorkspaceId && workspaceId === demoWorkspaceId)) {
+      const limit = PLAN_LIMITS[(workspace as any).plan].usersPerWorkspace;
+      const memberCount = await this.prisma.workspaceUser.count({ where: { workspaceId } });
+      const pendingInvites = await this.prisma.invitation.count({ where: { workspaceId, status: 'invited' } });
+      if (memberCount + pendingInvites >= limit) {
+        throw new BadRequestException('User limit reached for current plan');
+      }
+      const now = new Date();
+      if (!workspace.planExpiresAt || workspace.planExpiresAt <= now) {
+        throw new BadRequestException('Active subscription required');
+      }
+    }
     // 1. Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -79,9 +107,6 @@ export class WorkspaceService {
         },
       });
       // Send notification email (like invite)
-      const workspace = await this.prisma.workspace.findUnique({
-        where: { id: workspaceId },
-      });
       const workspaceName = workspace?.name || workspaceId;
       const frontendUrl = `${
         process.env.FRONTEND_URL || 'http://localhost:3000'
@@ -152,9 +177,6 @@ export class WorkspaceService {
       },
     });
     // 6. Send invitation email
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-    });
     const workspaceName = workspace?.name || workspaceId;
     const acceptUrl = `${BASE_URL}/workspaces/${workspaceId}/invites/${invite.id}/accept?token=${token}`;
     const frontendAcceptUrl = `${
@@ -350,6 +372,18 @@ export class WorkspaceService {
     });
     if (existing) throw new BadRequestException('User is already a member');
 
+    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    if (!workspace) throw new NotFoundException('Workspace not found');
+    const demoWorkspaceId = process.env.DEMO_WORKSPACE_ID;
+    if (!(demoWorkspaceId && workspaceId === demoWorkspaceId)) {
+      const limit = PLAN_LIMITS[(workspace as any).plan].usersPerWorkspace;
+      const memberCount = await this.prisma.workspaceUser.count({ where: { workspaceId } });
+      if (memberCount >= limit) throw new BadRequestException('User limit reached for current plan');
+      const now = new Date();
+      if (!workspace.planExpiresAt || workspace.planExpiresAt <= now) {
+        throw new BadRequestException('Active subscription required');
+      }
+    }
     // Accept invite
     await this.prisma.invitation.update({
       where: { id: inviteId },

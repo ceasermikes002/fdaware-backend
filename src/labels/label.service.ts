@@ -403,6 +403,16 @@ export class LabelService {
     if (!demoWorkspaceId) {
       throw new Error('DEMO_WORKSPACE_ID environment variable is not set.');
     }
+    // Ensure demo workspace exists to satisfy FK
+    const existingDemoWs = await this.prisma.workspace.findUnique({ where: { id: demoWorkspaceId } });
+    if (!existingDemoWs) {
+      await this.prisma.workspace.create({
+        data: {
+          id: demoWorkspaceId,
+          name: 'FDAware Demo Workspace',
+        },
+      });
+    }
     // Save label with isDemo: true and dummy name
     const label = await this.prisma.label.create({
       data: {

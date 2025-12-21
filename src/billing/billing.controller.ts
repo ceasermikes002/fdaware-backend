@@ -53,6 +53,15 @@ class CreateCheckoutSessionBody {
   })
   @IsEmail()
   customerEmail?: string;
+
+  @ApiProperty({
+    description: 'Plan to purchase (LITE, TEAM, SCALE)',
+    required: false,
+    example: 'TEAM',
+  })
+  @IsOptional()
+  @IsString()
+  plan?: 'LITE' | 'TEAM' | 'SCALE';
 }
 
 class CreatePortalSessionBody {
@@ -104,12 +113,13 @@ export class BillingController {
   @ApiBody({ type: CreateCheckoutSessionBody })
   @ApiResponse({ status: 201, description: 'Checkout session created' })
   async createCheckout(@Body() body: CreateCheckoutSessionBody) {
-    const { workspaceId, successUrl, cancelUrl, customerEmail } = body;
+    const { workspaceId, successUrl, cancelUrl, customerEmail, plan } = body;
     return this.billing.createCheckoutSession({
       workspaceId,
       successUrl,
       cancelUrl,
       customerEmail,
+      plan,
     });
   }
 
