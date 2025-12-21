@@ -1,12 +1,18 @@
-# Billing & Subscription (Vercel‑style)
+# Billing & Subscription (Workspace‑centric)
 
 ## Overview
 - Workspace‑first billing: the `Workspace` model is the single source of truth for plan state.
 - Fields: `plan`, `planExpiresAt`, `stripeCustomerId`, `stripeSubscriptionId`, `stripePriceId`, `billingInterval`.
-- Lite tier `$249/month`. Scanning requires active subscription and is limited to 2 SKUs/month; demo workspace bypasses checks.
+- Plans: Lite `$199/month`, Team `$499/month`, Scale `$899/month`.
+- Scanning requires active subscription. Demo workspace bypasses checks.
 
 ## Environment & Safety
-- `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY`, `STRIPE_LITE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `DEMO_WORKSPACE_ID`.
+- Required: `STRIPE_SECRET_KEY`, `STRIPE_PUBLIC_KEY`, `STRIPE_WEBHOOK_SECRET`, `DEMO_WORKSPACE_ID`.
+- Prices: `STRIPE_LITE_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_SCALE_PRICE_ID`.
+- Per‑plan limits (optional overrides; sensible defaults baked in):
+  - `PLAN_SKU_LIMIT_LITE` (default 2), `PLAN_SKU_LIMIT_TEAM` (default 10), `PLAN_SKU_LIMIT_SCALE` (default 25)
+  - `PLAN_USER_LIMIT_LITE` (default 1), `PLAN_USER_LIMIT_TEAM` (default 3), `PLAN_USER_LIMIT_SCALE` (default 10)
+  - `PLAN_WORKSPACE_LIMIT_LITE` (default 1), `PLAN_WORKSPACE_LIMIT_TEAM` (default 5), `PLAN_WORKSPACE_LIMIT_SCALE` (default unlimited)
 - Test vs Live: ensure price IDs match the environment; do not mix.
  - Webhook signature is verified using the raw body. The app disables global body parsing and re-adds it for non-webhook routes:
    - `NestFactory.create(AppModule, { bodyParser: false })`
@@ -23,7 +29,8 @@
   "workspaceId": "workspace_123",
   "successUrl": "https://app.example.com/billing/success",
   "cancelUrl": "https://app.example.com/billing/cancel",
-  "customerEmail": "user@company.com" // optional
+  "customerEmail": "user@company.com", // optional
+  "plan": "LITE" | "TEAM" | "SCALE" // optional (defaults to LITE)
 }
 ```
 - Behavior:
@@ -100,9 +107,16 @@ switch (event.type) {
 ```
 
 ## Paywall Enforcement
-- Server‑side only: before scans, check `Workspace.planExpiresAt > now` and monthly distinct SKUs `< 2`.
-- Demo workspace bypasses checks.
-- Never trust frontend flags; never use `User.plan` for gating.
+- Server‑side only:
+  - Before scans, check `Workspace.planExpiresAt > now` and monthly distinct SKUs are within plan limit.
+  - Plan limits (defaults; configurable via env): Lite 2 SKUs/month, Team 10 SKUs/month, Scale 25 SKUs/month.
+  - Demo workspace bypasses checks.
+  - Never trust frontend flags; never use `User.plan` for gating.
+- User limits per workspace:
+  - Invites and acceptance enforce per‑plan user caps (Lite 1, Team 3, Scale 10).
+  - Requires active subscription; pending invites count toward the cap.
+- Workspace caps per account:
+  - `createWorkspace` enforces a per‑account cap based on the user’s highest active plan across memberships (Lite 1, Team 5, Scale unlimited).
 
 ## Edge Cases & Rules
 1. Checkout succeeded but webhook delayed: webhooks are source of truth; no DB changes on redirect.
@@ -123,6 +137,11 @@ switch (event.type) {
 16. Manual API edits: only webhooks mutate billing; server enforces checks.
 17. Data integrity: never check `user.plan`; always check `workspace.plan`; never delete billing history.
 
+## Implementation Notes
+- Price→Plan mapping and per‑plan limits live in `src/billing/plan.config.ts`.
+- Webhooks update `Workspace.plan` from the subscription’s primary item price.
+- Checkout supports a `plan` parameter; if omitted, Lite is used.
+
 ## Swagger
 - Available at `/api/docs`, tag `Billing`. Documents checkout and webhook endpoints with request/response schemas.
 
@@ -136,3 +155,4 @@ switch (event.type) {
   - `stripe listen --forward-to http://localhost:8080/api/billing/webhook`
   - Complete Checkout via the returned URL.
 - Confirm DB writes in Prisma Studio: `stripeCustomerId`, `stripeSubscriptionId`, `planExpiresAt`, `stripePriceId`, `billingInterval` become non‑null after events.
+- E2E: run `npm run test:e2e` to validate SKU/user/workspace limits.

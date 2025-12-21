@@ -127,7 +127,7 @@ export class NotificationsGateway implements OnModuleInit {
       clientIds.forEach(clientId => {
         const client = this.connectedClients.get(clientId);
         if (client) {
-          client.send({ type: 'notification', data: notification });
+          client.send(notification);
         }
       });
       this.logger.debug(`Sent notification to user ${userId}:`, notification.type);
@@ -140,7 +140,7 @@ export class NotificationsGateway implements OnModuleInit {
     let sentCount = 0;
     this.connectedClients.forEach(client => {
       if (client.workspaceIds.includes(workspaceId)) {
-        client.send({ type: 'notification', data: notification });
+        client.send(notification);
         sentCount++;
       }
     });

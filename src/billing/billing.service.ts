@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 import { STRIPE_CONFIG } from '../config/stripe.config';
-import { LITE_SKU_LIMIT } from '../common/constants';
+import { PLAN_LIMITS, planFromPriceId } from './plan.config';
 
 function startOfMonth(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
@@ -34,10 +34,11 @@ export class BillingService {
     const priceId = (price && price.id) || undefined;
     const rawInterval = (price && price.recurring && price.recurring.interval) || undefined;
     const interval = rawInterval === 'month' ? 'MONTH' : rawInterval === 'year' ? 'YEAR' : undefined;
+    const plan = planFromPriceId(priceId) || 'LITE';
     await this.prisma.workspace.update({
       where: { id: workspaceId },
       data: {
-        plan: 'LITE',
+        plan,
         planExpiresAt: sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
         stripeCustomerId: (typeof sub.customer === 'string' ? sub.customer : sub.customer?.id) || null,
         stripeSubscriptionId: sub.id,
@@ -63,11 +64,12 @@ export class BillingService {
     return existing?.id || null;
   }
 
-  async createCheckoutSession(input: { workspaceId?: string; userId?: string; successUrl: string; cancelUrl: string; customerEmail?: string; }) {
+  async createCheckoutSession(input: { workspaceId?: string; userId?: string; successUrl: string; cancelUrl: string; customerEmail?: string; plan?: 'LITE' | 'TEAM' | 'SCALE'; }) {
     if (!this.stripe) throw new Error('Stripe is not configured');
-    if (!STRIPE_CONFIG.litePriceId) throw new Error('Stripe price id is not configured');
-    const { workspaceId, userId, successUrl, cancelUrl, customerEmail } = input;
+    const { workspaceId, userId, successUrl, cancelUrl, customerEmail, plan } = input;
     const clientRef = workspaceId || userId || undefined;
+    const priceId = plan === 'TEAM' ? STRIPE_CONFIG.teamPriceId : plan === 'SCALE' ? STRIPE_CONFIG.scalePriceId : STRIPE_CONFIG.litePriceId;
+    if (!priceId) throw new Error('Stripe price id is not configured');
     if (workspaceId) {
       const existing = await this.prisma.workspace.findFirst({ where: { id: workspaceId } });
       if (existing?.stripeSubscriptionId && existing.stripeCustomerId) {
@@ -91,7 +93,7 @@ export class BillingService {
       customer_email: customerEmail,
       line_items: [
         {
-          price: STRIPE_CONFIG.litePriceId,
+          price: priceId,
           quantity: 1,
         },
       ],
@@ -234,9 +236,10 @@ export class BillingService {
       select: { labelId: true },
     } as any);
     const usageCount = distinctLabels.length;
-
-    if (usageCount >= LITE_SKU_LIMIT) {
-      throw new Error('Lite plan limit reached: up to 2 SKUs per month');
+    const plan = (workspace as any).plan as 'LITE' | 'TEAM' | 'SCALE';
+    const limit = PLAN_LIMITS[plan].skuPerMonth;
+    if (usageCount >= limit) {
+      throw new Error('Plan limit reached for monthly SKUs');
     }
 
     const expiresAt: Date | null = (workspace as any).planExpiresAt || null;
@@ -274,6 +277,8 @@ export class BillingService {
       } catch {}
     }
     const subscriptionActive = !!workspace.planExpiresAt && workspace.planExpiresAt > now;
+    const plan = (workspace as any).plan as 'LITE' | 'TEAM' | 'SCALE';
+    const usageLimit = PLAN_LIMITS[plan].skuPerMonth;
     return {
       plan: (workspace as any).plan,
       planExpiresAt: workspace.planExpiresAt,
@@ -283,7 +288,7 @@ export class BillingService {
       stripePriceId: workspace.stripePriceId || null,
       billingInterval: (workspace as any).billingInterval || null,
       usageCount,
-      usageLimit: LITE_SKU_LIMIT,
+      usageLimit,
       subscriptionActive,
       planPriceAmount,
       planPriceCurrency,

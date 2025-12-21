@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { WorkspaceRoleGuard } from '../common/guards/workspace-role.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { NotificationsService } from './notifications.service';
 import {
@@ -36,7 +37,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Post()
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin', 'reviewer')
   async createNotification(
     @Body() createNotificationDto: CreateNotificationDto,
@@ -46,7 +47,7 @@ export class NotificationsController {
   }
 
   @Post('bulk')
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin')
   async createBulkNotifications(
     @Body() bulkCreateNotificationDto: BulkCreateNotificationDto,
@@ -118,7 +119,7 @@ export class NotificationsController {
   }
 
   @Post('cleanup')
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin')
   async cleanupExpiredNotifications() {
     return this.notificationsService.cleanupExpiredNotifications();
@@ -126,7 +127,7 @@ export class NotificationsController {
 
   // Helper endpoints for specific notification types
   @Post('label-analyzed')
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin', 'reviewer')
   async createLabelAnalyzedNotification(
     @Body() data: {
@@ -144,8 +145,29 @@ export class NotificationsController {
     );
   }
 
+  @Post('compliance-issue')
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
+  @Roles('admin', 'reviewer')
+  async createComplianceIssueNotification(
+    @Body() data: {
+      userId: string;
+      workspaceId: string;
+      labelName: string;
+      issueCount: number;
+      labelId: string;
+    }
+  ) {
+    return this.notificationsService.createComplianceIssueNotification(
+      data.userId,
+      data.workspaceId,
+      data.labelName,
+      data.issueCount,
+      data.labelId
+    );
+  }
+
   @Post('workspace-invite')
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin')
   async createWorkspaceInviteNotification(
     @Body() data: {
@@ -164,7 +186,7 @@ export class NotificationsController {
   }
 
   @Post('report-generated')
-  @UseGuards(WorkspaceRoleGuard)
+  @UseGuards(WorkspaceRoleGuard, RolesGuard)
   @Roles('admin', 'reviewer')
   async createReportGeneratedNotification(
     @Body() data: {

@@ -1,3 +1,4 @@
+process.env.DEMO_WORKSPACE_ID = process.env.DEMO_WORKSPACE_ID || 'demo-workspace-id';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
